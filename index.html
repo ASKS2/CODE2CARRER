@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoPulse Enterprise - Carbon Footprint Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-emerald-600 p-2 rounded-xl text-white shadow-md shadow-emerald-100">
+                    <i data-lucide="leaf" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900">EcoPulse <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 ml-1">Enterprise</span></h1>
+                    <p class="text-xs text-slate-500">Hackathon ID: <span class="font-mono font-medium text-slate-700">AZIS-JFNYD7</span></p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:flex items-center space-x-2 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                    <span class="px-2 text-slate-500 font-medium">DP3 Strategy:</span>
+                    <button id="btn-week-rolling" onclick="setWeekMode('rolling')" class="px-2.5 py-1 rounded-md font-medium transition-all bg-white shadow-sm text-slate-800">Rolling 7-Day</button>
+                    <button id="btn-week-calendar" onclick="setWeekMode('calendar')" class="px-2.5 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900">Calendar (Mon-Sun)</button>
+                </div>
+
+                <button onclick="exportData('json')" class="p-2 text-slate-600 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors" title="Export JSON">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                </button>
+                <button onclick="triggerImport()" class="p-2 text-slate-600 hover:text-emerald-600 hover:bg-slate-100 rounded-lg transition-colors" title="Import JSON">
+                    <i data-lucide="upload" class="w-5 h-5"></i>
+                </button>
+                <input type="file" id="import-file" class="hidden" accept=".json" onchange="handleImport(event)">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- DP1 Banner: Dynamic Overflow Nudge Alert -->
+        <div id="dp1-nudge-banner" class="hidden rounded-2xl p-5 border transition-all duration-300 shadow-sm relative overflow-hidden">
+            <div class="flex items-start space-x-4">
+                <div id="nudge-icon-bg" class="p-3 rounded-xl text-white">
+                    <i id="nudge-icon" data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between">
+                        <h3 id="nudge-title" class="font-bold text-lg">Target Exceeded Warning</h3>
+                        <div class="flex items-center space-x-2 text-xs">
+                            <span class="text-slate-500 font-medium">Nudge Mode:</span>
+                            <select id="nudge-mode-select" onchange="updateNudgeStrategy(this.value)" class="bg-white border border-slate-300 rounded-md px-2 py-1 font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option value="constructive">Constructive Guidance</option>
+                                <option value="firm">Firm Warning</option>
+                                <option value="gamified">Eco-Gamified Boss Fight</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="nudge-message" class="text-sm mt-1 leading-relaxed"></p>
+                    <div id="nudge-recommendation" class="mt-3 p-3 rounded-lg text-xs font-medium flex items-center space-x-2">
+                        <i data-lucide="lightbulb" class="w-4 h-4 flex-shrink-0"></i>
+                        <span id="nudge-rec-text"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metric KPI Cards Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <!-- Card 1: Total Footprint -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start text-slate-500 mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Total Footprint</span>
+                    <div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                        <i data-lucide="activity" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="kpi-total-co2" class="text-3xl font-extrabold text-slate-900">0.0</span>
+                    <span class="text-sm font-medium text-slate-500">kg CO₂e</span>
+                </div>
+                <div class="mt-3 flex items-center text-xs text-slate-500">
+                    <span id="kpi-activity-count" class="font-semibold text-slate-700">0</span>
+                    <span class="ml-1">activities logged total</span>
+                </div>
+            </div>
+
+            <!-- Card 2: Tree Absorption Equivalent -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start text-slate-500 mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Tree Absorption</span>
+                    <div class="p-2 bg-teal-50 text-teal-600 rounded-lg">
+                        <i data-lucide="trees" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="kpi-trees-count" class="text-3xl font-extrabold text-slate-900">0.0</span>
+                    <span class="text-sm font-medium text-slate-500">trees/yr</span>
+                </div>
+                <p class="mt-3 text-xs text-slate-500">Based on 21.7 kg CO₂/tree annual capacity</p>
+            </div>
+
+            <!-- Card 3: Weekly Target Budget -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start text-slate-500 mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Weekly Budget</span>
+                    <div class="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                        <i data-lucide="target" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="kpi-weekly-co2" class="text-3xl font-extrabold text-slate-900">0.0</span>
+                    <span class="text-sm font-medium text-slate-500">/ <span id="kpi-target-display">100.0</span> kg</span>
+                </div>
+                <!-- Progress Bar -->
+                <div class="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
+                    <div id="target-progress-bar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Card 4: Projected Pace (DP3 Window) -->
+            <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start text-slate-500 mb-3">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Pace Projection</span>
+                    <div class="p-2 bg-amber-50 text-amber-600 rounded-lg">
+                        <i data-lucide="trending-up" class="w-5 h-5"></i>
+                    </div>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="kpi-pace-projection" class="text-3xl font-extrabold text-slate-900">0.0</span>
+                    <span class="text-sm font-medium text-slate-500">kg/week</span>
+                </div>
+                <p id="kpi-pace-subtext" class="mt-3 text-xs text-slate-500">Current tracking window estimation</p>
+            </div>
+        </div>
+
+        <!-- Content Grid: Activity Logger & Chart Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Panel: Activity Logger Form (5 cols) -->
+            <div class="lg:col-span-5 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                            <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
+                            <span>Log Activity</span>
+                        </h2>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-medium">Live Emission Formula</span>
+                    </div>
+
+                    <!-- Quick Express Presets -->
+                    <div class="mb-5">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Quick Presets</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" onclick="applyPreset('commute')" class="p-2 border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 text-left transition-all">
+                                <span class="block text-xs font-bold text-slate-800">Car Drive</span>
+                                <span class="text-[10px] text-slate-500">25 km</span>
+                            </button>
+                            <button type="button" onclick="applyPreset('meal')" class="p-2 border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 text-left transition-all">
+                                <span class="block text-xs font-bold text-slate-800">Beef Meal</span>
+                                <span class="text-[10px] text-slate-500">1 serving</span>
+                            </button>
+                            <button type="button" onclick="applyPreset('flight')" class="p-2 border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 text-left transition-all">
+                                <span class="block text-xs font-bold text-slate-800">Flight</span>
+                                <span class="text-[10px] text-slate-500">500 km</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <form id="activity-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                        <!-- Category Selection -->
+                        <div>
+                            <label for="activity-category" class="block text-xs font-medium text-slate-700 mb-1">Category</label>
+                            <select id="activity-category" onchange="updateUnitLabel()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                                <option value="transportation">Transportation (Car, Bus, Flight)</option>
+                                <option value="energy">Home Energy (Electricity, Gas)</option>
+                                <option value="diet">Dietary Choices (Meat, Vegan, Dairy)</option>
+                                <option value="waste">Consumption & Waste</option>
+                            </select>
+                        </div>
+
+                        <!-- Activity Type & Subtype -->
+                        <div>
+                            <label for="activity-type" class="block text-xs font-medium text-slate-700 mb-1">Specific Activity</label>
+                            <select id="activity-type" onchange="recalculatePreview()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                                <!-- Options dynamically updated via JavaScript -->
+                            </select>
+                        </div>
+
+                        <!-- Quantity & Unit -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="activity-quantity" class="block text-xs font-medium text-slate-700 mb-1">Quantity</label>
+                                <input type="number" step="any" id="activity-quantity" required placeholder="0.0" oninput="recalculatePreview()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                            </div>
+                            <div>
+                                <label for="activity-unit" class="block text-xs font-medium text-slate-700 mb-1">Unit</label>
+                                <input type="text" id="activity-unit" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-500 font-medium cursor-not-allowed">
+                            </div>
+                        </div>
+
+                        <!-- Date Selection -->
+                        <div>
+                            <label for="activity-date" class="block text-xs font-medium text-slate-700 mb-1">Activity Date</label>
+                            <input type="date" id="activity-date" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all">
+                        </div>
+
+                        <!-- Live Formula Calculation Preview Banner -->
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                            <span class="text-slate-500 font-medium">Estimated Impact:</span>
+                            <span class="font-mono font-bold text-slate-900 text-sm"><span id="preview-co2">0.00</span> kg CO₂e</span>
+                        </div>
+
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all duration-200 flex items-center justify-center space-x-2">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            <span>Record Emission Entry</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Settings: Weekly Target Configuration -->
+                <div class="mt-6 pt-4 border-t border-slate-200 flex items-center justify-between">
+                    <label for="input-target-budget" class="text-xs font-semibold text-slate-600">Weekly Target (kg):</label>
+                    <input type="number" id="input-target-budget" value="100" onchange="updateTargetBudget(this.value)" class="w-24 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 text-right focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+            </div>
+
+            <!-- Right Panel: Dynamic Visual Analytics Chart (7 cols) -->
+            <div class="lg:col-span-7 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                            <i data-lucide="pie-chart" class="w-5 h-5 text-emerald-600"></i>
+                            <span>Category Distribution</span>
+                        </h2>
+                        <span class="text-xs text-slate-400">Real-time breakdown</span>
+                    </div>
+
+                    <!-- Chart Canvas Container -->
+                    <div class="relative h-64 w-full flex items-center justify-center">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Category Breakdown Summary Bar -->
+                <div id="chart-legend-container" class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-200 mt-4">
+                    <!-- Dynamic Legend Filled via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Logs Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-6 border-b border-slate-200 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-slate-900 flex items-center space-x-2">
+                    <i data-lucide="list" class="w-5 h-5 text-emerald-600"></i>
+                    <span>Activity History</span>
+                </h2>
+                <button onclick="clearAllActivities()" class="text-xs text-rose-600 hover:text-rose-800 font-medium">Clear All History</button>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="px-6 py-3 font-semibold">Date</th>
+                            <th class="px-6 py-3 font-semibold">Category</th>
+                            <th class="px-6 py-3 font-semibold">Activity</th>
+                            <th class="px-6 py-3 font-semibold">Quantity</th>
+                            <th class="px-6 py-3 font-semibold text-right">Emission (kg CO₂e)</th>
+                            <th class="px-6 py-3 font-semibold text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activity-table-body" class="divide-y divide-slate-100">
+                        <!-- Table Rows Rendered via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- DP2 Safety Net Modal: Absurd Input Detection -->
+    <div id="dp2-modal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-center space-x-3 text-amber-600">
+                <div class="p-3 bg-amber-100 rounded-xl">
+                    <i data-lucide="shield-alert" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900">Unusually Large Entry Detected</h3>
+            </div>
+            
+            <p class="text-sm text-slate-600 leading-relaxed">
+                You entered <span id="dp2-quantity-val" class="font-bold text-slate-900"></span> <span id="dp2-unit-val" class="font-semibold"></span>. This generates approximately <span id="dp2-co2-val" class="font-bold text-rose-600"></span> kg of CO₂e emissions.
+            </p>
+
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 space-y-1">
+                <p class="font-semibold">Environmental Scale Context:</p>
+                <p id="dp2-context-text"></p>
+            </div>
+
+            <p class="text-xs text-slate-500">Are you sure this value is accurate, or would you like to adjust it before logging?</p>
+
+            <div class="flex space-x-3 pt-2">
+                <button onclick="confirmDP2Submission()" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2 rounded-xl text-sm transition-colors">
+                    Yes, Confirm Entry
+                </button>
+                <button onclick="dismissDP2Modal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 rounded-xl text-sm transition-colors">
+                    Adjust Value
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // --- EMISSION FACTOR DATABASE ---
+        const EMISSION_FACTORS = {
+            transportation: {
+                car_gasoline: { name: 'Gasoline Car Drive', factor: 0.21, unit: 'km' },
+                car_electric: { name: 'Electric Vehicle Drive', factor: 0.05, unit: 'km' },
+                bus: { name: 'Public Bus Ride', factor: 0.08, unit: 'km' },
+                flight_short: { name: 'Short-haul Flight (<1500km)', factor: 0.25, unit: 'km' }
+            },
+            energy: {
+                electricity_grid: { name: 'Standard Grid Electricity', factor: 0.475, unit: 'kWh' },
+                natural_gas: { name: 'Natural Gas Heating', factor: 0.20, unit: 'kWh' }
+            },
+            diet: {
+                meal_beef: { name: 'Beef High-Impact Meal', factor: 6.5, unit: 'servings' },
+                meal_chicken: { name: 'Poultry Meal', factor: 1.3, unit: 'servings' },
+                meal_vegan: { name: 'Plant-Based Vegan Meal', factor: 0.5, unit: 'servings' }
+            },
+            waste: {
+                landfill_trash: { name: 'General Mixed Waste', factor: 0.50, unit: 'kg' },
+                recycled_material: { name: 'Recycled Waste', factor: 0.05, unit: 'kg' }
+            }
+        };
+
+        // --- STATE MANAGEMENT ---
+        let activities = JSON.parse(localStorage.getItem('ecopulse_activities') || '[]');
+        let targetBudget = parseFloat(localStorage.getItem('ecopulse_target') || '100');
+        let currentWeekMode = localStorage.getItem('ecopulse_week_mode') || 'rolling'; // 'rolling' or 'calendar'
+        let currentNudgeStrategy = localStorage.getItem('ecopulse_nudge_mode') || 'constructive';
+        let pendingActivity = null;
+        let categoryChartInstance = null;
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('activity-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('input-target-budget').value = targetBudget;
+            document.getElementById('nudge-mode-select').value = currentNudgeStrategy;
+            
+            updateUnitLabel();
+            updateWeekModeUI();
+            renderDashboard();
+            lucide.createIcons();
+        });
+
+        // Dynamic Unit & Subtype Options Update
+        function updateUnitLabel() {
+            const cat = document.getElementById('activity-category').value;
+            const typeSelect = document.getElementById('activity-type');
+            typeSelect.innerHTML = '';
+
+            const options = EMISSION_FACTORS[cat];
+            for (const key in options) {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = `${options[key].name} (${options[key].factor} kg CO₂/${options[key].unit})`;
+                typeSelect.appendChild(opt);
+            }
+
+            const currentTypeKey = typeSelect.value;
+            document.getElementById('activity-unit').value = options[currentTypeKey].unit;
+            recalculatePreview();
+        }
+
+        function recalculatePreview() {
+            const cat = document.getElementById('activity-category').value;
+            const typeKey = document.getElementById('activity-type').value;
+            const qty = parseFloat(document.getElementById('activity-quantity').value) || 0;
+            
+            if (EMISSION_FACTORS[cat] && EMISSION_FACTORS[cat][typeKey]) {
+                const factor = EMISSION_FACTORS[cat][typeKey].factor;
+                document.getElementById('activity-unit').value = EMISSION_FACTORS[cat][typeKey].unit;
+                const totalCo2 = (qty * factor).toFixed(2);
+                document.getElementById('preview-co2').textContent = totalCo2;
+            }
+        }
+
+        // Apply Express Presets
+        function applyPreset(presetType) {
+            if (presetType === 'commute') {
+                document.getElementById('activity-category').value = 'transportation';
+                updateUnitLabel();
+                document.getElementById('activity-type').value = 'car_gasoline';
+                document.getElementById('activity-quantity').value = 25;
+            } else if (presetType === 'meal') {
+                document.getElementById('activity-category').value = 'diet';
+                updateUnitLabel();
+                document.getElementById('activity-type').value = 'meal_beef';
+                document.getElementById('activity-quantity').value = 1;
+            } else if (presetType === 'flight') {
+                document.getElementById('activity-category').value = 'transportation';
+                updateUnitLabel();
+                document.getElementById('activity-type').value = 'flight_short';
+                document.getElementById('activity-quantity').value = 500;
+            }
+            recalculatePreview();
+        }
+
+        // Form Submit Handler & DP2 Trigger Check
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            const cat = document.getElementById('activity-category').value;
+            const typeKey = document.getElementById('activity-type').value;
+            const qty = parseFloat(document.getElementById('activity-quantity').value);
+            const date = document.getElementById('activity-date').value;
+
+            const config = EMISSION_FACTORS[cat][typeKey];
+            const co2 = qty * config.factor;
+
+            const activityData = {
+                id: Date.now().toString(),
+                category: cat,
+                typeKey: typeKey,
+                typeName: config.name,
+                quantity: qty,
+                unit: config.unit,
+                co2: parseFloat(co2.toFixed(2)),
+                date: date
+            };
+
+            // DP2 Trigger Condition: Quantity >= 10,000
+            if (qty >= 10000) {
+                pendingActivity = activityData;
+                triggerDP2Modal(qty, config.unit, co2);
+                return;
+            }
+
+            saveActivity(activityData);
+        }
+
+        // DP2 Absurd Input Modal Handlers
+        function triggerDP2Modal(qty, unit, co2) {
+            document.getElementById('dp2-quantity-val').textContent = qty.toLocaleString();
+            document.getElementById('dp2-unit-val').textContent = unit;
+            document.getElementById('dp2-co2-val').textContent = co2.toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+            // Environmental scale context
+            let contextMsg = '';
+            if (unit === 'km') {
+                const earthCircumference = (qty / 40075).toFixed(1);
+                contextMsg = `That is equal to circumnavigating the entire Earth approximately ${earthCircumference} times.`;
+            } else {
+                const avgHomeUsage = (co2 / 4000).toFixed(1);
+                contextMsg = `This single activity equals around ${avgHomeUsage} years of average household power consumption.`;
+            }
+            document.getElementById('dp2-context-text').textContent = contextMsg;
+            document.getElementById('dp2-modal').classList.remove('hidden');
+        }
+
+        function confirmDP2Submission() {
+            if (pendingActivity) {
+                saveActivity(pendingActivity);
+                pendingActivity = null;
+            }
+            dismissDP2Modal();
+        }
+
+        function dismissDP2Modal() {
+            document.getElementById('dp2-modal').classList.add('hidden');
+            pendingActivity = null;
+        }
+
+        // Save Activity State & Refresh
+        function saveActivity(act) {
+            activities.unshift(act);
+            localStorage.setItem('ecopulse_activities', JSON.stringify(activities));
+            
+            // Trigger Confetti if under target budget
+            const currentWeekly = calculateWeeklyEmissions();
+            if (currentWeekly <= targetBudget) {
+                confetti({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
+            }
+
+            document.getElementById('activity-quantity').value = '';
+            recalculatePreview();
+            renderDashboard();
+        }
+
+        function deleteActivity(id) {
+            activities = activities.filter(a => a.id !== id);
+            localStorage.setItem('ecopulse_activities', JSON.stringify(activities));
+            renderDashboard();
+        }
+
+        function clearAllActivities() {
+            if (confirm('Are you sure you want to clear all historical log entries?')) {
+                activities = [];
+                localStorage.removeItem('ecopulse_activities');
+                renderDashboard();
+            }
+        }
+
+        // --- DP3 WEEK DEFINITION LOGIC ---
+        function setWeekMode(mode) {
+            currentWeekMode = mode;
+            localStorage.setItem('ecopulse_week_mode', mode);
+            updateWeekModeUI();
+            renderDashboard();
+        }
+
+        function updateWeekModeUI() {
+            const btnRolling = document.getElementById('btn-week-rolling');
+            const btnCalendar = document.getElementById('btn-week-calendar');
+
+            if (currentWeekMode === 'rolling') {
+                btnRolling.className = 'px-2.5 py-1 rounded-md font-medium transition-all bg-white shadow-sm text-slate-800';
+                btnCalendar.className = 'px-2.5 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900';
+            } else {
+                btnCalendar.className = 'px-2.5 py-1 rounded-md font-medium transition-all bg-white shadow-sm text-slate-800';
+                btnRolling.className = 'px-2.5 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900';
+            }
+        }
+
+        function calculateWeeklyEmissions() {
+            const now = new Date();
+            return activities.reduce((sum, act) => {
+                const actDate = new Date(act.date);
+                if (currentWeekMode === 'rolling') {
+                    const diffDays = (now - actDate) / (1000 * 60 * 60 * 24);
+                    return (diffDays >= 0 && diffDays <= 7) ? sum + act.co2 : sum;
+                } else {
+                    // Calendar Week (Monday Start)
+                    const day = now.getDay();
+                    const diffToMon = (day === 0 ? 6 : day - 1);
+                    const mon = new Date(now);
+                    mon.setDate(now.getDate() - diffToMon);
+                    mon.setHours(0,0,0,0);
+                    return (actDate >= mon) ? sum + act.co2 : sum;
+                }
+            }, 0);
+        }
+
+        // --- DASHBOARD RENDER & DP1 NUDGE MANAGEMENT ---
+        function renderDashboard() {
+            // 1. KPI Calculations
+            const totalCO2 = activities.reduce((sum, a) => sum + a.co2, 0);
+            const totalTrees = (totalCO2 / 21.7).toFixed(1);
+            const weeklyCO2 = calculateWeeklyEmissions();
+
+            document.getElementById('kpi-total-co2').textContent = totalCO2.toFixed(1);
+            document.getElementById('kpi-activity-count').textContent = activities.length;
+            document.getElementById('kpi-trees-count').textContent = totalTrees;
+            document.getElementById('kpi-weekly-co2').textContent = weeklyCO2.toFixed(1);
+            document.getElementById('kpi-target-display').textContent = targetBudget.toFixed(1);
+
+            // Progress Bar & Pace
+            const progressPct = Math.min((weeklyCO2 / targetBudget) * 100, 100);
+            const progressBar = document.getElementById('target-progress-bar');
+            progressBar.style.width = `${progressPct}%`;
+            progressBar.className = weeklyCO2 > targetBudget ? 'bg-rose-500 h-2 rounded-full transition-all duration-500' : 'bg-emerald-500 h-2 rounded-full transition-all duration-500';
+
+            // Projected Pace (7-day extrapolation)
+            const pace = (weeklyCO2 * 1.15).toFixed(1);
+            document.getElementById('kpi-pace-projection').textContent = pace;
+
+            // 2. DP1 Target Overflow Nudge Check
+            renderDP1Banner(weeklyCO2);
+
+            // 3. Render Chart & Table
+            renderChart();
+            renderTable();
+        }
+
+        function updateTargetBudget(val) {
+            targetBudget = parseFloat(val) || 100;
+            localStorage.setItem('ecopulse_target', targetBudget);
+            renderDashboard();
+        }
+
+        function updateNudgeStrategy(val) {
+            currentNudgeStrategy = val;
+            localStorage.setItem('ecopulse_nudge_mode', val);
+            renderDashboard();
+        }
+
+        function renderDP1Banner(weeklyCO2) {
+            const banner = document.getElementById('dp1-nudge-banner');
+            if (weeklyCO2 <= targetBudget) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            banner.classList.remove('hidden');
+            const excess = (weeklyCO2 - targetBudget).toFixed(1);
+
+            const iconBg = document.getElementById('nudge-icon-bg');
+            const title = document.getElementById('nudge-title');
+            const msg = document.getElementById('nudge-message');
+            const recBox = document.getElementById('nudge-recommendation');
+            const recText = document.getElementById('nudge-rec-text');
+
+            if (currentNudgeStrategy === 'constructive') {
+                banner.className = 'rounded-2xl p-5 border border-amber-200 bg-amber-50/80 shadow-sm relative overflow-hidden text-amber-900';
+                iconBg.className = 'p-3 rounded-xl bg-amber-500 text-white';
+                title.textContent = 'Weekly Carbon Limit Reached';
+                msg.textContent = `You are currently ${excess} kg CO₂e over your target budget. Consider opting for public transport or plant-based meals for the remainder of the week.`;
+                recBox.className = 'mt-3 p-3 rounded-lg text-xs font-medium bg-amber-100 text-amber-900 flex items-center space-x-2';
+                recText.textContent = 'Recommendation: Switching 2 car trips to electric bus saves ~8.4 kg CO₂e.';
+            } else if (currentNudgeStrategy === 'firm') {
+                banner.className = 'rounded-2xl p-5 border border-rose-200 bg-rose-50/80 shadow-sm relative overflow-hidden text-rose-900';
+                iconBg.className = 'p-3 rounded-xl bg-rose-600 text-white';
+                title.textContent = 'CRITICAL: Carbon Allowance Exceeded!';
+                msg.textContent = `Alert: Emissions exceed your set threshold by ${excess} kg CO₂e. Immediate reduction strategy required to offset impact.`;
+                recBox.className = 'mt-3 p-3 rounded-lg text-xs font-medium bg-rose-100 text-rose-900 flex items-center space-x-2';
+                recText.textContent = 'Mandatory Action: Freeze all non-essential car travel and high-impact dietary selections.';
+            } else if (currentNudgeStrategy === 'gamified') {
+                banner.className = 'rounded-2xl p-5 border border-purple-200 bg-purple-50/80 shadow-sm relative overflow-hidden text-purple-900';
+                iconBg.className = 'p-3 rounded-xl bg-purple-600 text-white';
+                title.textContent = 'BOSS BATTLE: Carbon Monster Awakened!';
+                msg.textContent = `The CO₂ Monster grew by ${excess} kg! Defeat it by taking green actions to reduce its power bar.`;
+                recBox.className = 'mt-3 p-3 rounded-lg text-xs font-medium bg-purple-100 text-purple-900 flex items-center space-x-2';
+                recText.textContent = 'Quest: Log 1 Vegan Meal to strike -6.0 kg HP off the monster!';
+            }
+        }
+
+        // Render Analytics Chart
+        function renderChart() {
+            const catTotals = { transportation: 0, energy: 0, diet: 0, waste: 0 };
+            activities.forEach(a => {
+                if (catTotals[a.category] !== undefined) catTotals[a.category] += a.co2;
+            });
+
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            if (categoryChartInstance) categoryChartInstance.destroy();
+
+            categoryChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Transportation', 'Energy', 'Diet', 'Waste'],
+                    datasets: [{
+                        data: [catTotals.transportation, catTotals.energy, catTotals.diet, catTotals.waste],
+                        backgroundColor: ['#10b981', '#6366f1', '#f59e0b', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    cutout: '75%'
+                }
+            });
+
+            // Render Custom Chart Legend
+            const legend = document.getElementById('chart-legend-container');
+            legend.innerHTML = `
+                <div class="text-center"><span class="block text-xs text-slate-400">Transport</span><span class="text-sm font-bold text-emerald-600">${catTotals.transportation.toFixed(1)} kg</span></div>
+                <div class="text-center"><span class="block text-xs text-slate-400">Energy</span><span class="text-sm font-bold text-indigo-600">${catTotals.energy.toFixed(1)} kg</span></div>
+                <div class="text-center"><span class="block text-xs text-slate-400">Diet</span><span class="text-sm font-bold text-amber-600">${catTotals.diet.toFixed(1)} kg</span></div>
+                <div class="text-center"><span class="block text-xs text-slate-400">Waste</span><span class="text-sm font-bold text-slate-600">${catTotals.waste.toFixed(1)} kg</span></div>
+            `;
+        }
+
+        // Render Table History
+        function renderTable() {
+            const tbody = document.getElementById('activity-table-body');
+            tbody.innerHTML = '';
+
+            if (activities.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400 text-xs">No activity logs recorded yet. Start logging above!</td></tr>`;
+                return;
+            }
+
+            activities.forEach(act => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50/80 transition-colors';
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-mono text-xs text-slate-500">${act.date}</td>
+                    <td class="px-6 py-4 capitalize text-xs font-semibold text-slate-700">${act.category}</td>
+                    <td class="px-6 py-4 font-medium text-slate-900">${act.typeName}</td>
+                    <td class="px-6 py-4 text-xs text-slate-600">${act.quantity} ${act.unit}</td>
+                    <td class="px-6 py-4 font-mono font-bold text-right text-slate-900">${act.co2}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="deleteActivity('${act.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition-colors">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // JSON Import/Export Handlers
+        function exportData(format) {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activities, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `ecopulse_export_${Date.now()}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function triggerImport() {
+            document.getElementById('import-file').click();
+        }
+
+        function handleImport(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const imported = JSON.parse(evt.target.result);
+                    if (Array.isArray(imported)) {
+                        activities = imported;
+                        localStorage.setItem('ecopulse_activities', JSON.stringify(activities));
+                        renderDashboard();
+                        alert('Activities imported successfully!');
+                    }
+                } catch (err) {
+                    alert('Invalid JSON file format.');
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
