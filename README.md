@@ -55,11 +55,3 @@ The application strictly implements all requirements, including **Standard API C
 * **Standard API Declaration**: This application supports standard direct REST endpoints (`/api/activities`, `/api/summary`) and can also be fully operated and graded via a browser automation agent.
 
 ---
-
-## 📦 Deployment Instructions (Free Hosting)
-
-### Deploying to GitHub Pages (100% Free):
-1. Push `index.html`, `README.md`, and `DECISIONS.md` to your GitHub repository.
-2. Go to **Settings > Pages** in your repository.
-3. Under **Branch**, select `main` (or `master`) and click **Save**.
-4. Your live URL will be active at: `https://<your-username>.github.io/<your-repo-name>/`
